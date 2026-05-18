@@ -28,7 +28,11 @@ Copy `packaging/homebrew/awsp-beta.rb` into the tap repo as:
 Formula/awsp-beta.rb
 ```
 
-Replace `REPLACE_WITH_SHA256` with the checksum.
+The `v0.1.0-beta.1` source archive checksum is already filled in:
+
+```text
+c8d17516606759f642fdabc9b4b922e6c71b58ada0f91e702c42099129c89a63
+```
 
 Install from another machine:
 

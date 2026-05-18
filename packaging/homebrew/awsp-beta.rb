@@ -1,12 +1,11 @@
 # Copy this file to github.com/nomadsre/homebrew-awsp as Formula/awsp-beta.rb.
-# Replace REPLACE_WITH_SHA256 after tagging the app repository.
 
 class AwspBeta < Formula
   desc "Switch AWS SSO profiles across shell sessions"
   homepage "https://github.com/nomadsre/awsp"
   url "https://github.com/nomadsre/awsp/archive/refs/tags/v0.1.0-beta.1.tar.gz"
   version "0.1.0-beta.1"
-  sha256 "REPLACE_WITH_SHA256"
+  sha256 "c8d17516606759f642fdabc9b4b922e6c71b58ada0f91e702c42099129c89a63"
   license "MIT OR Apache-2.0"
   head "https://github.com/nomadsre/awsp.git", branch: "main"
 
