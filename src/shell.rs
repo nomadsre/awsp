@@ -43,13 +43,23 @@ unset __awsp_restore
 
 awsp() {{
   case "${{1-}}" in
-    ""|use|off|restore)
+    ""|use|activate|off|clear|restore)
       local __awsp_output
       local __awsp_status
       __awsp_output="$(command awsp __shell "$@")"
       __awsp_status=$?
       if [ $__awsp_status -eq 0 ]; then
         eval "$__awsp_output"
+        case "${{1-}}" in
+          ""|use|activate)
+            if [ -n "${{AWS_PROFILE:-}}" ]; then
+              printf '  [ok] AWS profile active: %s\n' "$AWS_PROFILE" >&2
+            fi
+            ;;
+          off|clear)
+            printf '  [ok] AWS profile cleared\n' >&2
+            ;;
+        esac
       else
         return $__awsp_status
       fi

@@ -83,6 +83,13 @@ pub fn clear_session_profile(session_id: &str) -> Result<()> {
     })
 }
 
+pub fn clear_all() -> Result<()> {
+    with_locked_state(|state| {
+        *state = State::default();
+        Ok(())
+    })
+}
+
 pub fn read_state() -> Result<State> {
     let path = state_path()?;
     read_state_at(&path)

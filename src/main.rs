@@ -20,7 +20,8 @@ use std::io::{BufRead, BufReader, Write};
 #[command(
     name = "awsp",
     version,
-    about = "Switch AWS SSO profiles across shell sessions."
+    about = "Switch AWS SSO profiles across shell sessions.",
+    after_help = "Quick start:\n  awsp                         Pick an SSO profile and activate it\n  awsp status                  Show local SSO cache status\n  awsp profiles                List complete SSO profiles\n  eval \"$(awsp init zsh)\"      Enable shell switching"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -43,8 +44,10 @@ enum Command {
         shell: bool,
     },
     /// List complete AWS SSO profiles.
+    #[command(visible_alias = "profiles")]
     List,
     /// Select and activate an AWS SSO profile.
+    #[command(visible_alias = "activate")]
     Use {
         /// Exact AWS profile name. Omit to choose with fzf.
         profile: Option<String>,
@@ -60,7 +63,22 @@ enum Command {
         session: String,
     },
     /// Clear the active AWS profile from this shell session.
+    #[command(visible_alias = "clear")]
     Off,
+    /// Run a command with a specific AWS profile.
+    Exec {
+        /// Exact AWS profile name.
+        profile: String,
+        /// Command and arguments to execute.
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+    /// Clear AWS CLI SSO sessions.
+    Logout {
+        /// Required because AWS CLI SSO logout clears every cached SSO session.
+        #[arg(long)]
+        all: bool,
+    },
     /// Show the current local awsp/AWS profile state.
     Current,
     /// Verify the active identity through AWS STS.
@@ -88,7 +106,11 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ShellCommand {
-    Use { profile: Option<String> },
+    #[command(alias = "activate")]
+    Use {
+        profile: Option<String>,
+    },
+    #[command(alias = "clear")]
     Off,
     Restore,
 }
@@ -138,6 +160,8 @@ fn run() -> Result<()> {
         Some(Command::Login { profile }) => login_profile(profile),
         Some(Command::LoginSession { session }) => login_session(&session),
         Some(Command::Off) => turn_off(OutputMode::Human),
+        Some(Command::Exec { profile, command }) => exec_profile(&profile, command),
+        Some(Command::Logout { all }) => logout(all),
         Some(Command::Current) => current(),
         Some(Command::Whoami { profile }) => whoami(profile),
         Some(Command::Status { profile, verify }) => status(profile, verify),
@@ -211,6 +235,52 @@ fn login_session(session: &str) -> Result<()> {
     let config = AwsConfig::load_from_env()?;
     let _ = config.require_session(session)?;
     aws::login_session(session)
+}
+
+fn exec_profile(profile_name: &str, command: Vec<String>) -> Result<()> {
+    if command.is_empty() {
+        bail!("no command specified");
+    }
+
+    let config = AwsConfig::load_from_env()?;
+    let profile = config.require_profile(profile_name)?.clone();
+    let status = cache::status_for_profile(&profile);
+
+    if status != LoginStatus::Valid {
+        if should_login(&profile, status)? {
+            aws::login_profile(&profile.name, aws::AwsOutput::Inherit)?;
+        } else if status == LoginStatus::Expired {
+            bail!("login declined; command was not run");
+        }
+    }
+
+    let status = std::process::Command::new(&command[0])
+        .args(&command[1..])
+        .env("AWS_PROFILE", &profile.name)
+        .env("AWS_SDK_LOAD_CONFIG", "1")
+        .env_remove("AWS_ACCESS_KEY_ID")
+        .env_remove("AWS_SECRET_ACCESS_KEY")
+        .env_remove("AWS_SESSION_TOKEN")
+        .env_remove("AWS_SESSION_EXPIRATION")
+        .status()
+        .with_context(|| format!("failed to execute {}", command[0]))?;
+
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+
+    Ok(())
+}
+
+fn logout(all: bool) -> Result<()> {
+    if !all {
+        bail!("AWS CLI SSO logout clears every cached SSO session; rerun with awsp logout --all");
+    }
+
+    aws::logout()?;
+    state::clear_all()?;
+    eprintln!("Cleared all AWS CLI SSO sessions and awsp state.");
+    Ok(())
 }
 
 fn select_profile(config: &AwsConfig, current: Option<&str>) -> Result<String> {

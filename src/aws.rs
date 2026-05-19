@@ -69,6 +69,23 @@ pub fn login_session(session: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn logout() -> Result<()> {
+    let status = Command::new("aws")
+        .args(["sso", "logout"])
+        .env("AWS_PAGER", "")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| "failed to run aws sso logout")?;
+
+    if !status.success() {
+        bail!("aws sso logout failed");
+    }
+
+    Ok(())
+}
+
 pub fn whoami(profile: Option<&str>) -> Result<()> {
     let mut command = Command::new("aws");
     command

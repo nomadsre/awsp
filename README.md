@@ -7,15 +7,18 @@ The tool stores only non-secret local state in `~/.config/awsp/state.json`. AWS 
 ## MVP behavior
 
 - `awsp` opens an `fzf` picker for complete AWS SSO profiles.
-- `awsp use <profile>` activates an exact profile name.
+- `awsp use <profile>` activates an exact profile name. `awsp activate <profile>` is an alias.
 - `awsp login <profile>` runs `aws sso login --profile <profile>`.
 - `awsp login-session <session>` runs `aws sso login --sso-session <session>`.
 - `awsp off` unsets the active AWS profile for the current shell.
+- `awsp exec <profile> -- <command>` runs one command with that profile.
+- `awsp logout --all` runs `aws sso logout` and clears local awsp state.
 - `awsp status` reads AWS CLI SSO cache files under `~/.aws/sso/cache` without network calls.
 - `awsp status --verify <profile>` calls `aws sts get-caller-identity`.
 - `awsp current` reports local env/state only.
 - `awsp whoami` calls AWS STS for the active profile.
 - `awsp doctor` checks dependencies and malformed SSO config.
+- `awsp profiles` is an alias for `awsp list`.
 
 ## Shell integration
 
@@ -31,7 +34,7 @@ For bash:
 eval "$(awsp init bash)"
 ```
 
-After integration is active, `awsp`, `awsp use`, `awsp off`, and `awsp restore` can update the current shell by evaluating shell-safe code emitted by the hidden `awsp __shell` command.
+After integration is active, `awsp`, `awsp use`, `awsp activate`, `awsp off`, `awsp clear`, and `awsp restore` can update the current shell by evaluating shell-safe code emitted by the hidden `awsp __shell` command. Successful switches print a short confirmation to stderr.
 
 Activation exports:
 
