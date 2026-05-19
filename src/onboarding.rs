@@ -166,14 +166,23 @@ fn replace_marked_block(
 
 fn rc_paths(shell: ShellKind) -> Result<Vec<PathBuf>> {
     let home = env::var("HOME").context("HOME is not set")?;
-    Ok(rc_paths_for_home(shell, Path::new(&home)))
+    let home = Path::new(&home);
+    Ok(match shell {
+        ShellKind::Bash => bash_rc_paths_for_home(home),
+        ShellKind::Zsh => zsh_rc_paths_for_home(home, env::var_os("ZDOTDIR").map(PathBuf::from)),
+    })
 }
 
+#[cfg(test)]
 fn rc_paths_for_home(shell: ShellKind, home: &Path) -> Vec<PathBuf> {
     match shell {
-        ShellKind::Bash => vec![home.join(".bashrc"), bash_login_rc_path(home)],
-        ShellKind::Zsh => vec![home.join(".zshrc")],
+        ShellKind::Bash => bash_rc_paths_for_home(home),
+        ShellKind::Zsh => zsh_rc_paths_for_home(home, None),
     }
+}
+
+fn bash_rc_paths_for_home(home: &Path) -> Vec<PathBuf> {
+    vec![home.join(".bashrc"), bash_login_rc_path(home)]
 }
 
 fn bash_login_rc_path(home: &Path) -> PathBuf {
@@ -184,6 +193,93 @@ fn bash_login_rc_path(home: &Path) -> PathBuf {
         }
     }
     home.join(".bash_profile")
+}
+
+fn zsh_rc_paths_for_home(home: &Path, zdotdir_env: Option<PathBuf>) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Some(zdotdir) = zdotdir_env {
+        push_unique_path(&mut dirs, expand_zdotdir_path(&zdotdir, home));
+    }
+
+    if let Some(zdotdir) = parse_zdotdir_from_zshenv(home) {
+        push_unique_path(&mut dirs, zdotdir);
+    }
+
+    let xdg_zsh_dir = home.join(".config").join("zsh");
+    if xdg_zsh_dir.is_dir() {
+        push_unique_path(&mut dirs, xdg_zsh_dir);
+    }
+
+    push_unique_path(&mut dirs, home.to_path_buf());
+
+    let mut paths = Vec::new();
+    for dir in dirs {
+        push_unique_path(&mut paths, dir.join(".zshrc"));
+        push_unique_path(&mut paths, dir.join(".zprofile"));
+    }
+    paths
+}
+
+fn parse_zdotdir_from_zshenv(home: &Path) -> Option<PathBuf> {
+    let content = fs::read_to_string(home.join(".zshenv")).ok()?;
+    for line in content.lines() {
+        let line = line.split('#').next().unwrap_or_default().trim();
+        let line = line.strip_prefix("export ").unwrap_or(line).trim();
+        let line = line.strip_prefix("typeset -gx ").unwrap_or(line).trim();
+        let Some(value) = line.strip_prefix("ZDOTDIR=") else {
+            continue;
+        };
+        let value = value
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(';');
+        if value.is_empty() {
+            continue;
+        }
+        return Some(expand_zdotdir_value(value, home));
+    }
+    None
+}
+
+fn expand_zdotdir_path(path: &Path, home: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    let value = path.to_string_lossy();
+    expand_zdotdir_value(&value, home)
+}
+
+fn expand_zdotdir_value(value: &str, home: &Path) -> PathBuf {
+    let value = value.trim().trim_matches('"').trim_matches('\'');
+
+    if value == "$HOME" || value == "${HOME}" || value == "~" {
+        return home.to_path_buf();
+    }
+    if let Some(rest) = value.strip_prefix("$HOME/") {
+        return home.join(rest);
+    }
+    if let Some(rest) = value.strip_prefix("${HOME}/") {
+        return home.join(rest);
+    }
+    if let Some(rest) = value.strip_prefix("~/") {
+        return home.join(rest);
+    }
+
+    let path = PathBuf::from(value);
+    if path.is_absolute() {
+        path
+    } else {
+        home.join(path)
+    }
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
 }
 
 fn display_paths(paths: &[PathBuf]) -> String {
@@ -256,6 +352,59 @@ mod tests {
         assert_eq!(
             paths,
             vec![home.join(".bashrc"), home.join(".bash_profile")]
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn zsh_setup_targets_zshrc_and_zprofile_by_default() {
+        let home = temp_home("zsh-default");
+
+        let paths = rc_paths_for_home(ShellKind::Zsh, &home);
+
+        assert_eq!(paths, vec![home.join(".zshrc"), home.join(".zprofile")]);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn zsh_setup_targets_exported_zdotdir_before_home() {
+        let home = temp_home("zsh-env-zdotdir");
+        let zdotdir = home.join(".config").join("zsh");
+
+        let paths = zsh_rc_paths_for_home(&home, Some(zdotdir.clone()));
+
+        assert_eq!(
+            paths,
+            vec![
+                zdotdir.join(".zshrc"),
+                zdotdir.join(".zprofile"),
+                home.join(".zshrc"),
+                home.join(".zprofile"),
+            ]
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn zsh_setup_reads_simple_zdotdir_from_zshenv() {
+        let home = temp_home("zsh-zshenv-zdotdir");
+        fs::write(
+            home.join(".zshenv"),
+            "export ZDOTDIR=\"$HOME/.config/zsh\"\n",
+        )
+        .unwrap();
+        let zdotdir = home.join(".config").join("zsh");
+
+        let paths = rc_paths_for_home(ShellKind::Zsh, &home);
+
+        assert_eq!(
+            paths,
+            vec![
+                zdotdir.join(".zshrc"),
+                zdotdir.join(".zprofile"),
+                home.join(".zshrc"),
+                home.join(".zprofile"),
+            ]
         );
         fs::remove_dir_all(home).unwrap();
     }

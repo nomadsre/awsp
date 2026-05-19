@@ -34,7 +34,7 @@ For bash:
 awsp setup bash
 ```
 
-`awsp setup` is a one-time install step. It writes the static shell integration to `~/.config/awsp/shell/awsp.sh` and adds a small source block to shell startup files. For zsh this is `~/.zshrc`. For bash this is `~/.bashrc` plus the first existing login file among `~/.bash_profile`, `~/.bash_login`, and `~/.profile`; if none exists, `~/.bash_profile` is created. New terminal tabs do not run `awsp init`.
+`awsp setup` is a one-time install step. It writes the static shell integration to `~/.config/awsp/shell/awsp.sh` and adds a small source block to shell startup files. For zsh this is `~/.zshrc` and `~/.zprofile`; if `ZDOTDIR` is exported or set in a simple `~/.zshenv`, setup also updates `$ZDOTDIR/.zshrc` and `$ZDOTDIR/.zprofile`. For bash this is `~/.bashrc` plus the first existing login file among `~/.bash_profile`, `~/.bash_login`, and `~/.profile`; if none exists, `~/.bash_profile` is created. New terminal tabs do not run `awsp init`.
 
 After integration is active, `awsp`, `awsp use`, `awsp activate`, `awsp off`, `awsp clear`, and `awsp restore` can update the current shell by evaluating shell-safe code emitted by the hidden `awsp __shell` command. Successful switches print a short confirmation to stderr.
 
