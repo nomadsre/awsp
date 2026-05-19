@@ -16,25 +16,25 @@ pub fn maybe_install_for_plain_entrypoint() -> Result<()> {
         return Ok(());
     };
 
-    let rc_path = rc_path(shell)?;
-    if integration_is_installed(&rc_path, &integration_script_path()?)? {
+    let rc_paths = rc_paths(shell)?;
+    if integration_is_installed(&rc_paths, &integration_script_path()?)? {
         return Ok(());
     }
 
     let question = format!(
         "awsp shell integration is not installed. Install a static hook into {}? [Y/n] ",
-        rc_path.display()
+        display_paths(&rc_paths)
     );
 
     if !prompt_yes_no(&question, true)? {
         return Ok(());
     }
 
-    install_shell_integration(shell)?;
+    let installed_paths = install_shell_integration(shell)?;
     let script_path = integration_script_path()?;
     eprintln!(
-        "Installed awsp shell integration: {} sources {}.",
-        rc_path.display(),
+        "Installed awsp shell integration: {} source {}.",
+        display_paths(&installed_paths),
         script_path.display()
     );
     eprintln!(
@@ -45,10 +45,14 @@ pub fn maybe_install_for_plain_entrypoint() -> Result<()> {
     Ok(())
 }
 
-pub fn install_shell_integration(shell: ShellKind) -> Result<()> {
+pub fn install_shell_integration(shell: ShellKind) -> Result<Vec<PathBuf>> {
     let script_path = integration_script_path()?;
     write_integration_script(&script_path, shell)?;
-    install_rc_hook(&rc_path(shell)?)
+    let rc_paths = rc_paths(shell)?;
+    for path in &rc_paths {
+        install_rc_hook(path)?;
+    }
+    Ok(rc_paths)
 }
 
 pub fn integration_script_path() -> Result<PathBuf> {
@@ -58,6 +62,13 @@ pub fn integration_script_path() -> Result<PathBuf> {
         .join("awsp")
         .join("shell")
         .join("awsp.sh"))
+}
+
+pub fn integration_is_installed_for_current_shell() -> Result<bool> {
+    let Some(shell) = detect_shell() else {
+        return Ok(false);
+    };
+    integration_is_installed(&rc_paths(shell)?, &integration_script_path()?)
 }
 
 fn write_integration_script(path: &Path, shell: ShellKind) -> Result<()> {
@@ -110,12 +121,22 @@ fn install_rc_hook(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn integration_is_installed(path: &Path, script_path: &Path) -> Result<bool> {
-    match fs::read_to_string(path) {
-        Ok(content) => Ok(content.contains(START_MARKER) && script_path.exists()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
+fn integration_is_installed(paths: &[PathBuf], script_path: &Path) -> Result<bool> {
+    if !script_path.exists() {
+        return Ok(false);
     }
+
+    for path in paths {
+        match fs::read_to_string(path) {
+            Ok(content) if content.contains(START_MARKER) => {}
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => {
+                return Err(error).with_context(|| format!("failed to read {}", path.display()))
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn rc_block() -> String {
@@ -143,18 +164,50 @@ fn replace_marked_block(
     Some(updated)
 }
 
-fn rc_path(shell: ShellKind) -> Result<PathBuf> {
+fn rc_paths(shell: ShellKind) -> Result<Vec<PathBuf>> {
     let home = env::var("HOME").context("HOME is not set")?;
-    let file_name = match shell {
-        ShellKind::Bash => ".bashrc",
-        ShellKind::Zsh => ".zshrc",
-    };
-    Ok(Path::new(&home).join(file_name))
+    Ok(rc_paths_for_home(shell, Path::new(&home)))
+}
+
+fn rc_paths_for_home(shell: ShellKind, home: &Path) -> Vec<PathBuf> {
+    match shell {
+        ShellKind::Bash => vec![home.join(".bashrc"), bash_login_rc_path(home)],
+        ShellKind::Zsh => vec![home.join(".zshrc")],
+    }
+}
+
+fn bash_login_rc_path(home: &Path) -> PathBuf {
+    for file_name in [".bash_profile", ".bash_login", ".profile"] {
+        let path = home.join(file_name);
+        if path.exists() {
+            return path;
+        }
+    }
+    home.join(".bash_profile")
+}
+
+fn display_paths(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(" and ")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_home(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = env::temp_dir().join(format!("awsp-{name}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
 
     #[test]
     fn rc_block_sources_static_script_without_eval_init() {
@@ -181,5 +234,29 @@ mod tests {
         assert!(updated.contains("before"));
         assert!(updated.contains("after"));
         assert!(!updated.contains("eval \"$(awsp init zsh)\""));
+    }
+
+    #[test]
+    fn bash_setup_targets_bashrc_and_existing_login_file() {
+        let home = temp_home("bash-existing-login");
+        fs::write(home.join(".profile"), "# existing profile\n").unwrap();
+
+        let paths = rc_paths_for_home(ShellKind::Bash, &home);
+
+        assert_eq!(paths, vec![home.join(".bashrc"), home.join(".profile")]);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn bash_setup_creates_bash_profile_when_no_login_file_exists() {
+        let home = temp_home("bash-new-login");
+
+        let paths = rc_paths_for_home(ShellKind::Bash, &home);
+
+        assert_eq!(
+            paths,
+            vec![home.join(".bashrc"), home.join(".bash_profile")]
+        );
+        fs::remove_dir_all(home).unwrap();
     }
 }

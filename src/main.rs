@@ -219,7 +219,7 @@ fn activate_profile(profile_name: Option<String>, mode: OutputMode) -> Result<()
             eprintln!(
                 "Shell integration is not active in this process, so AWS_PROFILE was not exported here."
             );
-            eprintln!("Run awsp setup zsh or awsp setup bash once, then restart the shell.");
+            print_inactive_shell_integration_guidance();
         }
     }
 
@@ -230,12 +230,16 @@ fn setup_shell(shell: Option<ShellKind>) -> Result<()> {
     let shell = shell
         .or_else(shell::detect_shell)
         .context("could not autodetect shell; pass zsh or bash")?;
-    onboarding::install_shell_integration(shell)?;
+    let rc_paths = onboarding::install_shell_integration(shell)?;
     let script_path = onboarding::integration_script_path()?;
 
-    println!("Installed awsp shell integration for {}.", shell.as_str());
-    println!("New shells will source {}.", script_path.display());
-    println!(
+    eprintln!("Installed awsp shell integration for {}.", shell.as_str());
+    eprintln!("New shells will source {}.", script_path.display());
+    eprintln!("Updated shell startup files:");
+    for path in rc_paths {
+        eprintln!("  {}", path.display());
+    }
+    eprintln!(
         "To enable it in the current shell, run: source {}",
         script_path.display()
     );
@@ -356,10 +360,21 @@ fn turn_off(mode: OutputMode) -> Result<()> {
             eprintln!(
                 "Shell integration is not active in this process, so AWS_PROFILE was not unset here."
             );
+            print_inactive_shell_integration_guidance();
         }
     }
 
     Ok(())
+}
+
+fn print_inactive_shell_integration_guidance() {
+    match onboarding::integration_is_installed_for_current_shell() {
+        Ok(true) => match onboarding::integration_script_path() {
+            Ok(path) => eprintln!("Restart the shell or run: source {}", path.display()),
+            Err(_) => eprintln!("Restart the shell or source the awsp shell integration."),
+        },
+        _ => eprintln!("Run awsp setup zsh or awsp setup bash once, then restart the shell."),
+    }
 }
 
 fn list_profiles() -> Result<()> {
