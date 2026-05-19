@@ -16,6 +16,21 @@ class AwspBeta < Formula
     system "cargo", "install", *std_cargo_args(path: ".")
   end
 
+  def caveats
+    <<~EOS
+      Homebrew installed awsp but did not modify your shell startup files.
+
+      Enable shell integration once:
+        awsp setup zsh
+
+      For bash:
+        awsp setup bash
+
+      Then restart the shell, or enable it immediately:
+        source "$HOME/.config/awsp/shell/awsp.sh"
+    EOS
+  end
+
   test do
     assert_match version.to_s, shell_output("#{bin}/awsp --version")
     assert_match "awsp shell integration", shell_output("#{bin}/awsp init zsh")
