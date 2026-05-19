@@ -19,7 +19,7 @@ git push origin main --tags
 Compute the source archive checksum:
 
 ```sh
-curl -L https://github.com/nomadsre/awsp/archive/refs/tags/v0.1.0-beta.5.tar.gz | shasum -a 256
+curl -L https://github.com/nomadsre/awsp/archive/refs/tags/v0.1.0-beta.6.tar.gz | shasum -a 256
 ```
 
 Copy `packaging/homebrew/awsp-beta.rb` into the tap repo as:
@@ -28,10 +28,10 @@ Copy `packaging/homebrew/awsp-beta.rb` into the tap repo as:
 Formula/awsp-beta.rb
 ```
 
-The `v0.1.0-beta.5` source archive checksum is already filled in:
+The `v0.1.0-beta.6` source archive checksum is already filled in:
 
 ```text
-751a9a3ff83f0693e949ff372c296f2f14d5329c5f20f9e3b469e49c18d54eb3
+51a14ca9477db27c87c8e5aa24e525763d28ce0b8f9765e708e0b2d279e93761
 ```
 
 Install from another machine:
