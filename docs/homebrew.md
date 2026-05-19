@@ -54,4 +54,4 @@ brew install ./Formula/awsp-beta.rb
 brew test awsp-beta
 ```
 
-The beta formula installs a prebuilt Apple Silicon binary on arm64 macOS. Intel macOS and Linux currently fall back to a source build until release artifacts are published for those platforms.
+The beta formula installs a prebuilt Apple Silicon binary on arm64 macOS. Other platforms need their own release artifact before they are added to the formula.
