@@ -45,11 +45,6 @@ awsp() {{
       if [ $__awsp_status -eq 0 ]; then
         eval "$__awsp_output"
         case "${{1-}}" in
-          ""|use|activate)
-            if [ -n "${{AWS_PROFILE:-}}" ]; then
-              printf '  [ok] AWS profile active: %s\n' "$AWS_PROFILE" >&2
-            fi
-            ;;
           off|clear)
             printf '  [ok] AWS profile cleared\n' >&2
             ;;

@@ -1,8 +1,9 @@
 mod aws;
 mod aws_config;
 mod cache;
-mod fzf;
 mod onboarding;
+mod palette;
+mod picker;
 mod shell;
 mod state;
 
@@ -146,9 +147,6 @@ fn run() -> Result<()> {
             let shell = shell
                 .or_else(shell::detect_shell)
                 .context("could not autodetect shell; pass zsh or bash")?;
-            if !fzf::is_available() {
-                eprintln!("awsp: warning: fzf is required for interactive profile selection");
-            }
             print!("{}", shell::init_script(shell));
             Ok(())
         }
@@ -216,6 +214,7 @@ fn activate_profile(profile_name: Option<String>, mode: OutputMode) -> Result<()
 
     match mode {
         OutputMode::Shell => {
+            print_switch_success(&profile);
             println!(
                 "{}",
                 shell::activation_code(&profile.name, Some(&session_id))
@@ -323,7 +322,7 @@ fn select_profile(config: &AwsConfig, current: Option<&str>) -> Result<String> {
         .iter()
         .map(cache::status_for_profile)
         .collect::<Vec<_>>();
-    fzf::select_profile(&config.profiles, &statuses, current)
+    picker::select_profile(&config.profiles, &statuses, current)
 }
 
 fn should_login(profile: &SsoProfile, status: LoginStatus) -> Result<bool> {
@@ -373,6 +372,19 @@ fn turn_off(mode: OutputMode) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_switch_success(profile: &SsoProfile) {
+    eprintln!("  ✓ Switched to {}", profile.name);
+    eprintln!("     {:<8} {}", "account", profile.account_id);
+    eprintln!("     {:<8} {}", "role", profile.role_name);
+    eprintln!("     {:<8} {}", "region", profile.region.label());
+    eprintln!(
+        "     {:<8} [{}]",
+        "env",
+        picker::detect_env(&profile.name).to_uppercase()
+    );
+    eprintln!("  → exported AWS_PROFILE and AWS_SDK_LOAD_CONFIG");
 }
 
 fn require_shell_function_for_activation(command: &str) -> Result<()> {
@@ -495,10 +507,7 @@ fn doctor() -> Result<()> {
         println!("aws cli: missing");
         println!("  {}", aws::missing_cli_message().replace('\n', "\n  "));
     }
-    println!(
-        "fzf: {}",
-        if fzf::is_available() { "ok" } else { "missing" }
-    );
+    println!("picker: builtin");
     println!("state: {}", state::state_path()?.display());
 
     match AwsConfig::load_from_env() {

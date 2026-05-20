@@ -6,7 +6,7 @@ The tool stores only non-secret local state in `~/.config/awsp/state.json`. AWS 
 
 ## MVP behavior
 
-- `awsp` opens an `fzf` picker for complete AWS SSO profiles.
+- `awsp` opens a built-in terminal picker for complete AWS SSO profiles.
 - `awsp use <profile>` activates an exact profile name. `awsp activate <profile>` is an alias.
 - `awsp login <profile>` runs `aws sso login --profile <profile>`.
 - `awsp login-session <session>` runs `aws sso login --sso-session <session>`.
@@ -83,13 +83,7 @@ source ~/.config/awsp/shell/awsp.sh
 
 ## Dependencies
 
-The intended Homebrew formula should declare:
-
-```ruby
-depends_on "fzf"
-```
-
-`fzf` is mandatory for interactive profile selection. AWS CLI is a runtime requirement only for commands that shell out to `aws`, such as SSO login, logout, `whoami`, and `status --verify`. `awsp doctor` reports whether `aws` is available and prints an install hint when it is missing.
+The Homebrew formula installs the `awsp` binary only. The interactive picker is built in. AWS CLI is a runtime requirement only for commands that shell out to `aws`, such as SSO login, logout, `whoami`, and `status --verify`. `awsp doctor` reports whether `aws` is available and prints an install hint when it is missing.
 
 ## Homebrew Beta
 
@@ -103,7 +97,7 @@ Once the tap repo contains `Formula/awsp-beta.rb`, install from another machine 
 brew install nomadsre/awsp/awsp-beta
 ```
 
-On Apple Silicon macOS, Homebrew installs a prebuilt `awsp` binary plus `fzf`. It does not install AWS CLI and does not modify `~/.zshrc`, `~/.bashrc`, or other shell startup files. Run `awsp setup zsh` or `awsp setup bash` once after install to add the shell hook.
+On Apple Silicon macOS, Homebrew installs a prebuilt `awsp` binary. It does not install AWS CLI and does not modify `~/.zshrc`, `~/.bashrc`, or other shell startup files. Run `awsp setup zsh` or `awsp setup bash` once after install to add the shell hook.
 
 ## Security
 
